@@ -1,1 +1,2 @@
 streamlit
+svg-turtle==1.1.0
