@@ -1,18 +1,18 @@
-# IDAI1011000465-Nihith-Ram-Bikkina
+# IDAI1021000465-Nihith-Ram-Bikkina
 
-# Smart Campus Assistant
+# MedTimer Daily Medicine Companion
 
 # Candidate Name - Nihith Ram Bikkina
 
-# Candidate Registration Number -1000465
+# Candidate Registration Number - 1000465
 
 # CRS Name: Artificial Intelligence
 
-# Course Name - AI-Based Smart Solutions: Designing Chatbots for Real-World Challenges
+# Course Name - Design and Deploy Interactive Python Applications for Social Good
 
 # School name - Birla Open Minds International School, Kollur
 
-# Summative Assessment 1
+# Summative Assessment 2
 
 **Project Overview**
 
@@ -30,13 +30,16 @@ All components work together in a simple, accessible layout designed for elderly
 
 **Deployment Instructions**
 
-  1*Create a requirements.txt file containing the necessary libraries (e.g., streamlit, pandas).
-  2*Create a GitHub repository and upload:
-    *app.py
-    *requirements.txt
-    *README.md
-Go to Streamlit Cloud → click Deploy an app.
-Connect your GitHub account.
-Select your repository and choose app.py as the main file.
-Deploy the application.
-Once deployed, copy the live link and include it in this README.
+*Step 1 = Create a requirements.txt file containing the necessary libraries (e.g., streamlit, pandas).
+*Step 2 = Create a GitHub repository and upload:
+   *app.py
+   *requirements.txt
+   *README.md
+*Step 3 = Go to Streamlit Cloud → click Deploy an app.
+*Step 4 = Connect your GitHub account.
+*Step 5 = Select your repository and choose app.py as the main file.
+*Step 6 = Deploy the application.
+*Step 7 = Once deployed, copy the live link and include it in this README.
+
+**Please click the link below to access my Campus Assistant chatbot:**
+https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/ 
