@@ -1,602 +1,705 @@
 import streamlit as st
+from datetime import datetime, timedelta
 import pandas as pd
-from datetime import datetime, date, timedelta
-import matplotlib.pyplot as plt
-import base64
-from io import BytesIO
-import tempfile
-import os
+import json
+from io import StringIO
 
 # Page configuration
 st.set_page_config(
-    page_title="MedTimer - Daily Medicine Companion",
+    page_title="MedTimer - Medication Tracker",
     page_icon="💊",
-    layout="wide"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
+
+# Custom CSS for mobile-like design
+st.markdown("""
+<style>
+    /* Main container styling */
+    .stApp {
+        background-color: #EFF6FF;
+        max-width: 450px;
+        margin: 0 auto;
+    }
+    
+    /* Remove padding */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 5rem;
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+    
+    /* Card styling */
+    .medicine-card {
+        background: white;
+        border-radius: 24px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .medicine-card.taken {
+        opacity: 0.6;
+        border: 2px solid #86EFAC;
+    }
+    
+    /* Header styling */
+    h1 {
+        color: #1E3A8A;
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    h2 {
+        color: #1E3A8A;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    h3 {
+        color: #1F2937;
+        font-size: 1.25rem;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        width: 100%;
+        border-radius: 16px;
+        height: 3.5rem;
+        font-weight: 500;
+        border: none;
+        transition: all 0.3s;
+    }
+    
+    /* Input styling */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stSelectbox > div > div > select,
+    .stTimeInput > div > div > input {
+        border-radius: 16px;
+        border: 2px solid #E5E7EB;
+        padding: 1rem 1.5rem;
+        background-color: #F9FAFB;
+    }
+    
+    /* Status badges */
+    .status-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    .status-taken {
+        background-color: #D1FAE5;
+        color: #065F46;
+    }
+    
+    .status-pending {
+        background-color: #FED7AA;
+        color: #9A3412;
+    }
+    
+    /* Stats box */
+    .stats-box {
+        background: white;
+        border-radius: 24px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Progress circle */
+    .progress-circle {
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        font-size: 3rem;
+        font-weight: bold;
+    }
+    
+    /* Bottom navigation */
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 2px solid #E5E7EB;
+        padding: 0.75rem 1rem;
+        z-index: 999;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+    
+    /* Hide streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'medicines' not in st.session_state:
     st.session_state.medicines = []
-if 'adherence_data' not in st.session_state:
-    st.session_state.adherence_data = {}
 
-# Custom CSS for exact styling
-st.markdown("""
-<style>
-    .main {
-        background-color: #f8f9fa;
-    }
-    .stButton>button {
-        background-color: #4CAF50;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        padding: 10px 24px;
-        border: none;
-        width: 100%;
-    }
-    .stButton>button:hover {
-        background-color: #45a049;
-        color: white;
-    }
-    .medicine-card {
-        background-color: white;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 10px;
-        border-left: 5px solid #4CAF50;
-    }
-    .taken-card {
-        border-left-color: #4CAF50 !important;
-        background-color: #e8f5e9 !important;
-    }
-    .upcoming-card {
-        border-left-color: #ff9800 !important;
-        background-color: #fff3e0 !important;
-    }
-    .missed-card {
-        border-left-color: #f44336 !important;
-        background-color: #ffebee !important;
-    }
-    .adherence-score {
-        font-size: 72px;
-        font-weight: bold;
-        color: #4CAF50;
-        text-align: center;
-        margin: 20px 0;
-    }
-    .score-label {
-        text-align: center;
-        color: #666;
-        font-size: 16px;
-        margin-bottom: 30px;
-    }
-    .main-header {
-        color: #2c3e50;
-        font-weight: 600;
-        margin-bottom: 20px;
-    }
-    .status-badge {
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-weight: bold;
-        font-size: 14px;
-    }
-    .taken-badge {
-        background-color: #4CAF50;
-        color: white;
-    }
-    .upcoming-badge {
-        background-color: #ff9800;
-        color: white;
-    }
-    .missed-badge {
-        background-color: #f44336;
-        color: white;
-    }
-    .download-button {
-        display: inline-block;
-        background-color: #4CAF50;
-        color: white;
-        padding: 10px 20px;
-        text-decoration: none;
-        border-radius: 5px;
-        font-weight: bold;
-        margin: 10px 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+if 'logs' not in st.session_state:
+    st.session_state.logs = []
 
-# Generate smiley face image (using matplotlib instead of turtle for Streamlit compatibility)
-def generate_smiley():
-    fig, ax = plt.subplots(figsize=(3, 3))
-    ax.set_aspect('equal')
-    
-    # Draw face
-    face_circle = plt.Circle((0.5, 0.5), 0.4, color='#FFD700', ec='black', lw=2)
-    ax.add_patch(face_circle)
-    
-    # Draw eyes
-    left_eye = plt.Circle((0.35, 0.6), 0.08, color='white', ec='black', lw=1)
-    right_eye = plt.Circle((0.65, 0.6), 0.08, color='white', ec='black', lw=1)
-    ax.add_patch(left_eye)
-    ax.add_patch(right_eye)
-    
-    # Draw pupils
-    left_pupil = plt.Circle((0.35, 0.6), 0.04, color='black')
-    right_pupil = plt.Circle((0.65, 0.6), 0.04, color='black')
-    ax.add_patch(left_pupil)
-    ax.add_patch(right_pupil)
-    
-    # Draw smile
-    smile = plt.Arc((0.5, 0.4), 0.3, 0.2, angle=0, theta1=180, theta2=0, color='black', lw=3)
-    ax.add_patch(smile)
-    
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
-    
-    # Save to buffer
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-    buf.seek(0)
-    
-    return buf
+if 'current_screen' not in st.session_state:
+    st.session_state.current_screen = 'home'
 
-# Generate trophy image
-def generate_trophy():
-    fig, ax = plt.subplots(figsize=(3, 3))
-    ax.set_aspect('equal')
-    
-    # Draw trophy base
-    base = plt.Rectangle((0.2, 0.1), 0.6, 0.1, color='#FFD700', ec='black', lw=2)
-    ax.add_patch(base)
-    
-    # Draw trophy cup
-    cup_bottom = plt.Rectangle((0.25, 0.2), 0.5, 0.2, color='#FFD700', ec='black', lw=2)
-    ax.add_patch(cup_bottom)
-    
-    cup_top = plt.Rectangle((0.3, 0.4), 0.4, 0.3, color='#FFD700', ec='black', lw=2)
-    ax.add_patch(cup_top)
-    
-    # Draw handles
-    left_handle = plt.Arc((0.2, 0.45), 0.2, 0.2, angle=0, theta1=90, theta2=270, color='#FFD700', lw=4)
-    right_handle = plt.Arc((0.8, 0.45), 0.2, 0.2, angle=0, theta1=270, theta2=90, color='#FFD700', lw=4)
-    ax.add_patch(left_handle)
-    ax.add_patch(right_handle)
-    
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis('off')
-    
-    # Save to buffer
-    buf = BytesIO()
-    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-    buf.seek(0)
-    
-    return buf
+if 'editing_medicine' not in st.session_state:
+    st.session_state.editing_medicine = None
 
-# Medicine management functions
-def add_medicine(name, dosage, time_str, frequency, notes=""):
-    medicine = {
-        'id': len(st.session_state.medicines) + 1,
-        'name': name,
-        'dosage': dosage,
-        'time': time_str,
-        'frequency': frequency,
-        'notes': notes,
-        'taken': False,
-        'date_added': date.today().isoformat()
-    }
-    st.session_state.medicines.append(medicine)
+# Helper functions
+def get_today():
+    return datetime.now().strftime('%Y-%m-%d')
+
+def get_today_formatted():
+    return datetime.now().strftime('%A, %B %d')
+
+def is_medicine_taken(medicine_id, scheduled_time):
+    today = get_today()
+    return any(
+        log['medicine_id'] == medicine_id and 
+        log['date'] == today and 
+        log['time'] == scheduled_time and 
+        log['taken']
+        for log in st.session_state.logs
+    )
+
+def mark_medicine_taken(medicine_id, medicine_name, scheduled_time):
+    today = get_today()
+    now = datetime.now().strftime('%H:%M')
     
-    # Update adherence data
-    today = date.today().isoformat()
-    if today not in st.session_state.adherence_data:
-        st.session_state.adherence_data[today] = {'expected': 0, 'taken': 0}
-    st.session_state.adherence_data[today]['expected'] += 1
+    # Find existing log
+    for i, log in enumerate(st.session_state.logs):
+        if (log['medicine_id'] == medicine_id and 
+            log['date'] == today and 
+            log['time'] == scheduled_time):
+            # Toggle taken status
+            st.session_state.logs[i]['taken'] = not log['taken']
+            st.session_state.logs[i]['taken_at'] = now if not log['taken'] else None
+            return
+    
+    # Create new log
+    st.session_state.logs.append({
+        'medicine_id': medicine_id,
+        'medicine_name': medicine_name,
+        'date': today,
+        'time': scheduled_time,
+        'taken': True,
+        'taken_at': now
+    })
 
-def mark_as_taken(medicine_id):
-    for med in st.session_state.medicines:
-        if med['id'] == medicine_id:
-            med['taken'] = True
-            
-            # Update adherence data
-            today = date.today().isoformat()
-            if today in st.session_state.adherence_data:
-                st.session_state.adherence_data[today]['taken'] += 1
-            break
-
-def mark_as_not_taken(medicine_id):
-    for med in st.session_state.medicines:
-        if med['id'] == medicine_id:
-            med['taken'] = False
-            
-            # Update adherence data
-            today = date.today().isoformat()
-            if today in st.session_state.adherence_data:
-                st.session_state.adherence_data[today]['taken'] = max(0, st.session_state.adherence_data[today]['taken'] - 1)
-            break
-
-def delete_medicine(medicine_id):
-    st.session_state.medicines = [med for med in st.session_state.medicines if med['id'] != medicine_id]
-    # Note: We're not removing from adherence_data as it's historical
-
-def calculate_adherence_score():
-    """Calculate adherence score for last 7 days"""
-    if not st.session_state.adherence_data:
+def calculate_adherence():
+    if not st.session_state.medicines:
         return 0
     
-    today = date.today()
-    seven_days_ago = today - timedelta(days=6)
+    last_7_days = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') 
+                   for i in range(7)]
     
-    total_expected = 0
-    total_taken = 0
+    total_expected = len(st.session_state.medicines) * 7
+    total_taken = sum(
+        1 for log in st.session_state.logs
+        if log['date'] in last_7_days and log['taken']
+    )
     
-    for day_offset in range(7):
-        current_day = today - timedelta(days=day_offset)
-        day_str = current_day.isoformat()
-        
-        if day_str in st.session_state.adherence_data:
-            data = st.session_state.adherence_data[day_str]
-            total_expected += data['expected']
-            total_taken += data['taken']
-    
-    if total_expected == 0:
-        return 0
-    
-    return round((total_taken / total_expected) * 100)
+    return round((total_taken / total_expected) * 100) if total_expected > 0 else 0
 
-# Streamlit UI
-def main():
-    # Sidebar Navigation
-    with st.sidebar:
+# Navigation function
+def navigate_to(screen):
+    st.session_state.current_screen = screen
+    st.rerun()
+
+# Home Screen
+def home_screen():
+    st.markdown("# MedTimer")
+    st.markdown(f"<p style='color: #1E40AF; font-size: 1.1rem;'>{get_today_formatted()}</p>", 
+                unsafe_allow_html=True)
+    
+    st.markdown("## Today's Medicines")
+    
+    if not st.session_state.medicines:
         st.markdown("""
-        <div style="text-align: center; padding: 20px 0;">
-            <h1 style="color: #4CAF50; margin-bottom: 10px;">💊</h1>
-            <h2 style="color: #2c3e50; margin: 0;">MedTimer</h2>
-            <p style="color: #666; margin-top: 5px;">Daily Medicine Companion</p>
+        <div class="medicine-card" style="text-align: center; padding: 3rem 1.5rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">💊</div>
+            <p style="color: #6B7280; font-size: 1.1rem; margin-bottom: 0.5rem;">No medicines scheduled</p>
+            <p style="color: #9CA3AF; font-size: 0.9rem;">Tap the + button below to add your first medicine</p>
         </div>
         """, unsafe_allow_html=True)
+    else:
+        # Sort medicines by time
+        sorted_medicines = sorted(st.session_state.medicines, key=lambda x: x['time'])
         
-        st.markdown("---")
-        
-        # Current date
-        st.markdown(f"### {datetime.now().strftime('%A, %B %d')}")
-        
-        # Quick stats
-        score = calculate_adherence_score()
-        st.metric("Adherence Score", f"{score}%")
-        
-        st.markdown("---")
-        
-        # Navigation
-        nav_options = ["🏠 Home", "➕ Add Medicine", "📊 Report", "⭐ Score"]
-        selected_nav = st.radio("Navigate", nav_options, label_visibility="collapsed")
-    
-    # Home Page
-    if selected_nav == "🏠 Home":
-        st.title("Today's Medicines")
-        
-        if not st.session_state.medicines:
-            st.info("No medicines added yet. Go to 'Add Medicine' to get started!")
-        else:
-            current_time = datetime.now().time()
-            today_str = date.today().isoformat()
+        for medicine in sorted_medicines:
+            taken = is_medicine_taken(medicine['id'], medicine['time'])
             
-            for med in st.session_state.medicines:
-                # Only show medicines added today or earlier
-                if med['date_added'] > today_str:
-                    continue
-                    
-                med_time = datetime.strptime(med['time'], "%H:%M").time()
+            card_class = "medicine-card taken" if taken else "medicine-card"
+            
+            with st.container():
+                st.markdown(f'<div class="{card_class}">', unsafe_allow_html=True)
                 
-                # Determine status
-                if med['taken']:
-                    status_class = "taken-card"
-                    status_badge_class = "taken-badge"
-                    status_text = "✓ Taken"
-                elif current_time >= med_time:
-                    status_class = "missed-card"
-                    status_badge_class = "missed-badge"
-                    status_text = "✗ Missed"
-                else:
-                    status_class = "upcoming-card"
-                    status_badge_class = "upcoming-badge"
-                    status_text = "⏰ Upcoming"
-                
-                # Display medicine card
-                with st.container():
-                    col1, col2 = st.columns([4, 1])
-                    
-                    with col1:
-                        st.markdown(f"""
-                        <div class="medicine-card {status_class}">
-                            <div style="display: flex; justify-content: space-between; align-items: start;">
-                                <div style="flex: 1;">
-                                    <h3 style="margin: 0 0 5px 0; color: #2c3e50;">{med['name']}</h3>
-                                    <p style="margin: 0 0 5px 0; color: #666; font-size: 16px;">{med['dosage']}</p>
-                                    <p style="margin: 0 0 5px 0; color: #666; font-size: 14px;">{med['time']} - {med['frequency']}</p>
-                                    {f'<p style="margin: 0; color: #888; font-size: 13px;"><em>Note: {med["notes"]}</em></p>' if med['notes'] else ''}
-                                </div>
-                                <div>
-                                    <span class="status-badge {status_badge_class}">{status_text}</span>
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col2:
-                        if not med['taken'] and current_time >= med_time:
-                            if st.button("Mark Taken", key=f"mark_{med['id']}", use_container_width=True):
-                                mark_as_taken(med['id'])
-                                st.rerun()
-                        elif med['taken']:
-                            if st.button("Undo", key=f"undo_{med['id']}", use_container_width=True):
-                                mark_as_not_taken(med['id'])
-                                st.rerun()
-                        else:
-                            st.button("Upcoming", key=f"up_{med['id']}", disabled=True, use_container_width=True)
-            
-            st.markdown("---")
-            col_total, col_taken, col_missed = st.columns(3)
-            with col_total:
-                total_today = len([m for m in st.session_state.medicines if m['date_added'] <= today_str])
-                st.metric("Total Today", total_today)
-            with col_taken:
-                taken_today = len([m for m in st.session_state.medicines if m['taken'] and m['date_added'] <= today_str])
-                st.metric("Taken", taken_today, delta=None)
-            with col_missed:
-                missed_today = len([m for m in st.session_state.medicines if not m['taken'] and 
-                                  datetime.strptime(m['time'], "%H:%M").time() <= current_time and 
-                                  m['date_added'] <= today_str])
-                st.metric("Missed", missed_today, delta=None)
-    
-    # Add Medicine Page
-    elif selected_nav == "➕ Add Medicine":
-        st.title("Add Medicine")
-        
-        with st.form("add_medicine_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                name = st.text_input("Medicine Name *", placeholder="e.g., Aspirin", help="Enter the name of your medicine")
-                dosage = st.text_input("Dosage *", placeholder="e.g., 100mg, 1 tablet", help="Enter the dosage amount")
-                med_time = st.time_input("Time", value=datetime.strptime("09:00", "%H:%M").time())
-            
-            with col2:
-                frequency = st.selectbox("Frequency", ["Daily", "Twice Daily", "Weekly", "Monthly", "As Needed"])
-                notes = st.text_area("Notes (Optional)", placeholder="e.g., Take with food, After meals", 
-                                   help="Any additional instructions")
-            
-            st.markdown("---")
-            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-            
-            with col_btn1:
-                submit = st.form_submit_button("✅ Add Medicine", type="primary", use_container_width=True)
-            with col_btn2:
-                cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
-            
-            if submit:
-                if name and dosage:
-                    add_medicine(name, dosage, med_time.strftime("%H:%M"), frequency, notes)
-                    st.success(f"✅ **{name}** has been added successfully!")
-                    st.balloons()
-                else:
-                    st.error("Please fill in all required fields (*)")
-    
-    # Report Page
-    elif selected_nav == "📊 Report":
-        st.title("7-Day Report")
-        st.markdown("Your medication history at a glance")
-        
-        # Generate report data
-        today = date.today()
-        
-        if st.session_state.medicines:
-            # Create date headers for last 7 days
-            date_headers = []
-            for i in range(6, -1, -1):
-                report_date = today - timedelta(days=i)
-                date_headers.append(report_date.strftime("%a %d"))
-            
-            # Create report table data
-            report_data = []
-            medicines_today = [m for m in st.session_state.medicines if m['date_added'] <= today.isoformat()]
-            
-            for med in medicines_today:
-                row = {"Medicine": f"{med['name']}\n{med['dosage']}"}
-                med_date_added = datetime.strptime(med['date_added'], "%Y-%m-%d").date()
-                
-                for i in range(6, -1, -1):
-                    report_date = today - timedelta(days=i)
-                    date_key = report_date.strftime("%a %d")
-                    
-                    if report_date >= med_date_added:
-                        # For today, check if taken
-                        if report_date == today:
-                            row[date_key] = "☑" if med['taken'] else "☒"
-                        else:
-                            # For past days, show taken status (simplified logic)
-                            row[date_key] = "☑" if med['taken'] and report_date == today else "☒"
-                    else:
-                        row[date_key] = ""
-                
-                report_data.append(row)
-            
-            if report_data:
-                df = pd.DataFrame(report_data)
-                
-                # Display as table
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    column_config={
-                        "Medicine": st.column_config.TextColumn(
-                            "Medicine",
-                            width="medium"
-                        )
-                    }
-                )
-                
-                # Download CSV
-                csv = df.to_csv(index=False)
-                b64 = base64.b64encode(csv.encode()).decode()
-                href = f'<a href="data:file/csv;base64,{b64}" download="medtimer_report.csv" class="download-button">📥 Export to CSV</a>'
-                st.markdown(href, unsafe_allow_html=True)
-                
-                # Summary statistics
-                st.markdown("---")
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns([4, 1])
                 
                 with col1:
-                    total_meds = len(medicines_today)
-                    st.metric("Total Medicines", total_meds)
+                    icon = "💊" if not taken else "✅"
+                    name_style = "text-decoration: line-through; color: #9CA3AF;" if taken else "color: #1F2937;"
+                    st.markdown(f"""
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                            <span style="font-size: 2rem;">{icon}</span>
+                            <h3 style="{name_style} margin: 0;">{medicine['name']}</h3>
+                        </div>
+                        <p style="color: #6B7280; margin-left: 2.75rem; margin-bottom: 0.75rem;">{medicine['dosage']}</p>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"""
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: 2.75rem; color: #6B7280; margin-bottom: 0.75rem;">
+                            <span>🕐</span>
+                            <span>{medicine['time']}</span>
+                            <span>•</span>
+                            <span>{medicine['frequency']}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    status_class = "status-taken" if taken else "status-pending"
+                    status_text = "✓ Taken" if taken else "Pending"
+                    st.markdown(f'<span class="status-badge {status_class}">{status_text}</span>', 
+                              unsafe_allow_html=True)
+                    
+                    if medicine.get('notes'):
+                        st.markdown(f"<p style='color: #6B7280; font-size: 0.875rem; font-style: italic; margin-top: 0.75rem; margin-left: 2.75rem;'>Note: {medicine['notes']}</p>", 
+                                  unsafe_allow_html=True)
                 
                 with col2:
-                    days_tracked = min(len(st.session_state.adherence_data), 7)
-                    st.metric("Days Tracked", days_tracked)
+                    if st.button("✏️", key=f"edit_{medicine['id']}", help="Edit medicine"):
+                        st.session_state.editing_medicine = medicine
+                        navigate_to('edit')
                 
-                with col3:
-                    total_taken = sum(data['taken'] for data in st.session_state.adherence_data.values())
-                    st.metric("Total Taken", total_taken)
+                # Mark taken button
+                button_type = "secondary" if taken else "primary"
+                button_text = "Mark as Not Taken" if taken else "✓ Mark as Taken"
                 
-                # Legend
-                st.markdown("---")
-                st.markdown("**Legend**")
-                legend_col1, legend_col2 = st.columns(2)
-                with legend_col1:
-                    st.markdown("☑ Medicine taken")
-                with legend_col2:
-                    st.markdown("☒ Medicine not taken")
-            else:
-                st.info("No medicine history available for the last 7 days.")
-        else:
-            st.info("No medicines added yet. Add medicines to see your report.")
+                if st.button(button_text, key=f"mark_{medicine['id']}", 
+                           type=button_type, use_container_width=True):
+                    mark_medicine_taken(medicine['id'], medicine['name'], medicine['time'])
+                    st.rerun()
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Quick stats
+        total_today = len(sorted_medicines)
+        completed_today = sum(1 for m in sorted_medicines 
+                            if is_medicine_taken(m['id'], m['time']))
+        
+        st.markdown("""
+        <div class="medicine-card" style="margin-top: 2rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div style="text-align: center;">
+                    <p style="color: #6B7280; margin-bottom: 0.25rem;">Total Today</p>
+                    <p style="color: #1E3A8A; font-size: 1.5rem; font-weight: bold; margin: 0;">{}</p>
+                </div>
+                <div style="text-align: center;">
+                    <p style="color: #6B7280; margin-bottom: 0.25rem;">Completed</p>
+                    <p style="color: #16A34A; font-size: 1.5rem; font-weight: bold; margin: 0;">{}</p>
+                </div>
+            </div>
+        </div>
+        """.format(total_today, completed_today), unsafe_allow_html=True)
+
+# Add Medicine Screen
+def add_medicine_screen():
+    st.markdown("← Back", help="Go back")
+    if st.button("⬅️ Back to Home", use_container_width=True):
+        navigate_to('home')
     
-    # Score Page
-    else:
-        st.title("Adherence Score")
-        st.markdown("Your medication adherence over the last 7 days")
+    st.markdown("# 💊 Add Medicine")
+    
+    with st.form("add_medicine_form"):
+        name = st.text_input("Medicine Name *", placeholder="e.g., Aspirin")
+        dosage = st.text_input("Dosage *", placeholder="e.g., 100mg, 1 tablet")
+        time = st.time_input("Time", value=datetime.strptime("09:00", "%H:%M").time())
+        frequency = st.selectbox("Frequency", [
+            "Daily", "Twice daily", "Three times daily", 
+            "Every other day", "Weekly", "As needed"
+        ])
+        notes = st.text_area("Notes (Optional)", placeholder="e.g., Take with food")
         
-        score = calculate_adherence_score()
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button("Add Medicine", type="primary", 
+                                            use_container_width=True)
+        with col2:
+            cancelled = st.form_submit_button("Cancel", use_container_width=True)
         
-        # Display score in large format
-        st.markdown(f'<div class="adherence-score">{score}%</div>', unsafe_allow_html=True)
-        st.markdown('<div class="score-label">Adherence</div>', unsafe_allow_html=True)
-        
-        # Display message based on score
-        col_msg, col_img = st.columns([2, 1])
-        
-        with col_msg:
-            if score >= 80:
-                st.success("### 🎉 Excellent! Keep up the great work!")
-                st.markdown("You're doing an amazing job staying on track with your medications!")
-                img_buffer = generate_trophy()
-            elif score >= 50:
-                st.info("### 👍 Good Job!")
-                st.markdown("You're making good progress with your medication routine!")
-                img_buffer = generate_smiley()
+        if submitted:
+            if name.strip() and dosage.strip():
+                medicine = {
+                    'id': str(datetime.now().timestamp()),
+                    'name': name.strip(),
+                    'dosage': dosage.strip(),
+                    'time': time.strftime("%H:%M"),
+                    'frequency': frequency,
+                    'notes': notes.strip()
+                }
+                st.session_state.medicines.append(medicine)
+                st.success("✅ Medicine added successfully!")
+                st.balloons()
+                navigate_to('home')
             else:
-                st.warning("### 💪 Keep Trying!")
-                st.markdown("Don't worry! Every day is a new chance to improve your routine.")
-                img_buffer = generate_smiley()  # Still show smiley for encouragement
+                st.error("Please fill in medicine name and dosage")
         
-        with col_img:
-            if score >= 50:
-                st.image(img_buffer, caption="Great job!" if score >= 80 else "You're doing well!")
+        if cancelled:
+            navigate_to('home')
+
+# Edit Medicine Screen
+def edit_medicine_screen():
+    if not st.session_state.editing_medicine:
+        navigate_to('home')
+        return
+    
+    medicine = st.session_state.editing_medicine
+    
+    if st.button("⬅️ Back to Home", use_container_width=True):
+        st.session_state.editing_medicine = None
+        navigate_to('home')
+    
+    st.markdown("# ✏️ Edit Medicine")
+    
+    with st.form("edit_medicine_form"):
+        name = st.text_input("Medicine Name *", value=medicine['name'])
+        dosage = st.text_input("Dosage *", value=medicine['dosage'])
+        time_obj = datetime.strptime(medicine['time'], "%H:%M").time()
+        time = st.time_input("Time", value=time_obj)
+        frequency = st.selectbox("Frequency", [
+            "Daily", "Twice daily", "Three times daily", 
+            "Every other day", "Weekly", "As needed"
+        ], index=["Daily", "Twice daily", "Three times daily", 
+                 "Every other day", "Weekly", "As needed"].index(medicine['frequency']))
+        notes = st.text_area("Notes (Optional)", value=medicine.get('notes', ''))
         
-        # Statistics
-        st.markdown("---")
-        st.markdown("### 7-Day Statistics")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            updated = st.form_submit_button("Update", type="primary", 
+                                          use_container_width=True)
+        with col2:
+            deleted = st.form_submit_button("Delete", use_container_width=True)
+        with col3:
+            cancelled = st.form_submit_button("Cancel", use_container_width=True)
         
-        today = date.today()
-        total_expected = 0
-        total_taken = 0
+        if updated:
+            if name.strip() and dosage.strip():
+                for i, med in enumerate(st.session_state.medicines):
+                    if med['id'] == medicine['id']:
+                        st.session_state.medicines[i] = {
+                            'id': medicine['id'],
+                            'name': name.strip(),
+                            'dosage': dosage.strip(),
+                            'time': time.strftime("%H:%M"),
+                            'frequency': frequency,
+                            'notes': notes.strip()
+                        }
+                        break
+                st.success("✅ Medicine updated successfully!")
+                st.session_state.editing_medicine = None
+                navigate_to('home')
+            else:
+                st.error("Please fill in medicine name and dosage")
         
-        for day_offset in range(7):
-            current_day = today - timedelta(days=day_offset)
-            day_str = current_day.isoformat()
+        if deleted:
+            st.session_state.medicines = [m for m in st.session_state.medicines 
+                                         if m['id'] != medicine['id']]
+            st.success("🗑️ Medicine deleted")
+            st.session_state.editing_medicine = None
+            navigate_to('home')
+        
+        if cancelled:
+            st.session_state.editing_medicine = None
+            navigate_to('home')
+
+# Adherence Screen
+def adherence_screen():
+    st.markdown("# 📈 Adherence Score")
+    st.markdown("<p style='color: #6B7280;'>Your medication adherence over the last 7 days</p>", 
+                unsafe_allow_html=True)
+    
+    adherence_score = calculate_adherence()
+    
+    # Determine color and message based on score
+    if adherence_score >= 90:
+        color = "#22C55E"
+        bg_color = "#F0FDF4"
+        border_color = "#86EFAC"
+        emoji = "🌟"
+        title = "Excellent!"
+        message = "You're doing a great job staying on track with your medications."
+    elif adherence_score >= 70:
+        color = "#EAB308"
+        bg_color = "#FEFCE8"
+        border_color = "#FDE047"
+        emoji = "👍"
+        title = "Good Progress"
+        message = "You're making good progress. Try to maintain consistency."
+    else:
+        color = "#F97316"
+        bg_color = "#FFF7ED"
+        border_color = "#FDBA74"
+        emoji = "💪"
+        title = "Keep Trying"
+        message = "Don't worry! Every day is a new chance to improve your routine."
+    
+    # Progress circle
+    st.markdown(f"""
+    <div class="medicine-card" style="text-align: center; padding: 2rem;">
+        <div class="progress-circle" style="background: conic-gradient({color} {adherence_score}%, #E5E7EB 0); position: relative;">
+            <div style="position: absolute; background: white; width: 160px; height: 160px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <span style="font-size: 3rem; color: {color}; font-weight: bold;">{adherence_score}%</span>
+                <span style="color: #6B7280; font-size: 0.875rem;">Adherence</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Feedback message
+    st.markdown(f"""
+    <div style="background: {bg_color}; border: 2px solid {border_color}; border-radius: 24px; padding: 1.5rem; margin: 1.5rem 0;">
+        <div style="display: flex; gap: 1rem; align-items: start;">
+            <span style="font-size: 2.5rem;">{emoji}</span>
+            <div>
+                <h3 style="color: {color}; margin-bottom: 0.5rem;">{title}</h3>
+                <p style="color: #374151; margin: 0;">{message}</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Statistics
+    total_taken = sum(1 for log in st.session_state.logs if log['taken'])
+    expected_doses = len(st.session_state.medicines) * 7
+    
+    st.markdown(f"""
+    <div class="medicine-card">
+        <h3 style="margin-bottom: 1rem;">7-Day Statistics</h3>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <div style="background: #EFF6FF; padding: 1rem; border-radius: 16px; display: flex; justify-content: space-between;">
+                <span style="color: #374151;">Total Medicines</span>
+                <span style="color: #1E3A8A; font-weight: bold;">{len(st.session_state.medicines)}</span>
+            </div>
+            <div style="background: #F0FDF4; padding: 1rem; border-radius: 16px; display: flex; justify-content: space-between;">
+                <span style="color: #374151;">Doses Taken</span>
+                <span style="color: #16A34A; font-weight: bold;">{total_taken}</span>
+            </div>
+            <div style="background: #F9FAFB; padding: 1rem; border-radius: 16px; display: flex; justify-content: space-between;">
+                <span style="color: #374151;">Expected Doses</span>
+                <span style="color: #1F2937; font-weight: bold;">{expected_doses}</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Perfect week badge
+    if adherence_score == 100:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%); border-radius: 24px; padding: 1.5rem; text-align: center; margin-top: 1.5rem;">
+            <div style="font-size: 4rem; margin-bottom: 0.5rem;">🏆</div>
+            <h3 style="color: white; margin-bottom: 0.5rem;">Perfect Week!</h3>
+            <p style="color: white; font-size: 0.875rem; margin: 0;">You took all your medicines on time this week!</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Report Screen
+def report_screen():
+    st.markdown("# 📊 7-Day Report")
+    st.markdown("<p style='color: #6B7280;'>Your medication history at a glance</p>", 
+                unsafe_allow_html=True)
+    
+    # Export button
+    if st.button("📥 Export to CSV", type="primary", use_container_width=True, 
+                disabled=len(st.session_state.medicines) == 0):
+        if st.session_state.medicines:
+            # Generate last 7 days
+            last_7_days = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') 
+                          for i in range(7)]
+            last_7_days.reverse()
             
-            if day_str in st.session_state.adherence_data:
-                data = st.session_state.adherence_data[day_str]
-                total_expected += data['expected']
-                total_taken += data['taken']
-        
-        # Display metrics in cards
-        col_stat1, col_stat2, col_stat3 = st.columns(3)
-        
-        with col_stat1:
-            st.metric(
-                "Total Medicines",
-                len(st.session_state.medicines),
-                help="Number of medicines in your schedule"
-            )
-        
-        with col_stat2:
-            st.metric(
-                "Doses Taken",
-                total_taken,
-                help="Total doses taken in the last 7 days"
-            )
-        
-        with col_stat3:
-            st.metric(
-                "Expected Doses",
-                total_expected,
-                help="Total doses expected in the last 7 days"
-            )
-        
-        # Progress visualization
-        if total_expected > 0:
-            progress = total_taken / total_expected
-            st.markdown("---")
-            st.markdown("### Progress Overview")
+            # Create CSV
+            csv_data = []
+            for medicine in st.session_state.medicines:
+                row = {
+                    'Medicine Name': medicine['name'],
+                    'Dosage': medicine['dosage'],
+                    'Time': medicine['time']
+                }
+                for day in last_7_days:
+                    day_name = datetime.strptime(day, '%Y-%m-%d').strftime('%a %d')
+                    taken = any(
+                        log['medicine_id'] == medicine['id'] and 
+                        log['date'] == day and 
+                        log['taken']
+                        for log in st.session_state.logs
+                    )
+                    row[day_name] = 'Taken' if taken else 'Missed'
+                csv_data.append(row)
             
-            # Progress bar
-            st.progress(progress)
-            st.caption(f"{total_taken} out of {total_expected} doses taken ({score}%)")
+            df = pd.DataFrame(csv_data)
+            csv = df.to_csv(index=False)
             
-            # Create a simple chart
-            if len(st.session_state.adherence_data) > 0:
-                dates = []
-                adherence_rates = []
-                
-                for day_offset in range(6, -1, -1):
-                    current_day = today - timedelta(days=day_offset)
-                    day_str = current_day.isoformat()
-                    date_label = current_day.strftime("%a")
-                    
-                    if day_str in st.session_state.adherence_data:
-                        data = st.session_state.adherence_data[day_str]
-                        if data['expected'] > 0:
-                            rate = (data['taken'] / data['expected']) * 100
-                        else:
-                            rate = 0
-                    else:
-                        rate = 0
-                    
-                    dates.append(date_label)
-                    adherence_rates.append(rate)
-                
-                # Create bar chart
-                fig, ax = plt.subplots(figsize=(10, 4))
-                bars = ax.bar(dates, adherence_rates, color='#4CAF50', alpha=0.7)
-                ax.set_ylim(0, 100)
-                ax.set_ylabel('Adherence %')
-                ax.set_title('Daily Adherence (Last 7 Days)')
-                ax.grid(True, alpha=0.3)
-                
-                # Add value labels on bars
-                for bar in bars:
-                    height = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2., height + 1,
-                           f'{int(height)}%', ha='center', va='bottom', fontsize=9)
-                
-                st.pyplot(fig)
+            st.download_button(
+                label="Download CSV",
+                data=csv,
+                file_name=f"medtimer-report-{get_today()}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    
+    if not st.session_state.medicines:
+        st.markdown("""
+        <div class="medicine-card" style="text-align: center; padding: 3rem 1.5rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">📅</div>
+            <p style="color: #6B7280; font-size: 1.1rem; margin-bottom: 0.5rem;">No medicines to show</p>
+            <p style="color: #9CA3AF; font-size: 0.9rem;">Add medicines to see your history</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # Generate report table
+        last_7_days = [(datetime.now() - timedelta(days=i)) for i in range(7)]
+        last_7_days.reverse()
+        
+        # Create table HTML
+        table_html = '<div class="medicine-card" style="overflow-x: auto; padding: 0;">'
+        table_html += '<table style="width: 100%; border-collapse: collapse;">'
+        
+        # Header
+        table_html += '<tr style="background: #DBEAFE; border-bottom: 2px solid #93C5FD;">'
+        table_html += '<th style="padding: 1rem; text-align: left; color: #1E3A8A;">Medicine</th>'
+        for day in last_7_days:
+            day_name = day.strftime('%a')
+            day_num = day.strftime('%d')
+            table_html += f'<th style="padding: 1rem; text-align: center; color: #1E3A8A;"><div>{day_name}</div><div style="font-size: 0.75rem; color: #1E40AF;">{day_num}</div></th>'
+        table_html += '</tr>'
+        
+        # Rows
+        for idx, medicine in enumerate(st.session_state.medicines):
+            bg = '#F9FAFB' if idx % 2 == 0 else 'white'
+            table_html += f'<tr style="background: {bg}; border-bottom: 1px solid #E5E7EB;">'
+            table_html += f'<td style="padding: 1rem;"><div style="color: #1F2937; font-weight: 500;">{medicine["name"]}</div><div style="color: #6B7280; font-size: 0.75rem;">{medicine["dosage"]}</div></td>'
+            
+            for day in last_7_days:
+                day_str = day.strftime('%Y-%m-%d')
+                taken = any(
+                    log['medicine_id'] == medicine['id'] and 
+                    log['date'] == day_str and 
+                    log['taken']
+                    for log in st.session_state.logs
+                )
+                icon = '✅' if taken else '❌'
+                color = '#22C55E' if taken else '#D1D5DB'
+                table_html += f'<td style="padding: 1rem; text-align: center;"><span style="font-size: 1.5rem;">{icon}</span></td>'
+            
+            table_html += '</tr>'
+        
+        # Footer
+        total_taken = sum(1 for log in st.session_state.logs if log['taken'])
+        table_html += f'''
+        <tr style="background: #EFF6FF; border-top: 2px solid #93C5FD;">
+            <td colspan="8" style="padding: 1rem;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center;">
+                    <div>
+                        <p style="color: #6B7280; font-size: 0.875rem; margin-bottom: 0.25rem;">Total Medicines</p>
+                        <p style="color: #1E3A8A; font-weight: bold; margin: 0;">{len(st.session_state.medicines)}</p>
+                    </div>
+                    <div>
+                        <p style="color: #6B7280; font-size: 0.875rem; margin-bottom: 0.25rem;">Days Tracked</p>
+                        <p style="color: #1E3A8A; font-weight: bold; margin: 0;">7</p>
+                    </div>
+                    <div>
+                        <p style="color: #6B7280; font-size: 0.875rem; margin-bottom: 0.25rem;">Total Taken</p>
+                        <p style="color: #16A34A; font-weight: bold; margin: 0;">{total_taken}</p>
+                    </div>
+                </div>
+            </td>
+        </tr>
+        '''
+        
+        table_html += '</table></div>'
+        
+        st.markdown(table_html, unsafe_allow_html=True)
+        
+        # Legend
+        st.markdown("""
+        <div class="medicine-card" style="margin-top: 1.5rem;">
+            <h3 style="margin-bottom: 1rem;">Legend</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-size: 1.5rem;">✅</span>
+                    <span style="color: #374151;">Medicine taken</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-size: 1.5rem;">❌</span>
+                    <span style="color: #374151;">Medicine not taken</span>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Bottom Navigation
+def bottom_nav():
+    nav_items = [
+        {'id': 'home', 'label': 'Home', 'icon': '🏠'},
+        {'id': 'add', 'label': 'Add', 'icon': '➕'},
+        {'id': 'report', 'label': 'Report', 'icon': '📊'},
+        {'id': 'adherence', 'label': 'Score', 'icon': '📈'},
+    ]
+    
+    st.markdown('<div style="height: 5rem;"></div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="bottom-nav"><div style="max-width: 450px; margin: 0 auto;"><div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem;">', unsafe_allow_html=True)
+    
+    cols = st.columns(4)
+    for i, item in enumerate(nav_items):
+        with cols[i]:
+            is_active = st.session_state.current_screen == item['id']
+            button_style = """
+                background: #3B82F6; 
+                color: white; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            """ if is_active else """
+                background: transparent; 
+                color: #6B7280;
+            """
+            
+            if st.button(
+                f"{item['icon']}\n{item['label']}", 
+                key=f"nav_{item['id']}", 
+                use_container_width=True,
+                type="primary" if is_active else "secondary"
+            ):
+                navigate_to(item['id'])
+    
+    st.markdown('</div></div></div>', unsafe_allow_html=True)
+
+# Main app logic
+def main():
+    # Display current screen
+    if st.session_state.current_screen == 'home':
+        home_screen()
+    elif st.session_state.current_screen == 'add':
+        add_medicine_screen()
+    elif st.session_state.current_screen == 'edit':
+        edit_medicine_screen()
+    elif st.session_state.current_screen == 'adherence':
+        adherence_screen()
+    elif st.session_state.current_screen == 'report':
+        report_screen()
+    
+    # Bottom navigation
+    bottom_nav()
 
 if __name__ == "__main__":
     main()
