@@ -41,5 +41,5 @@ All components work together in a simple, accessible layout designed for elderly
 * Step 6 = Deploy the application.
 * Step 7 = Once deployed, copy the live link and include it in this README.
 
-**Please click the link below to access my Campus Assistant chatbot:**
+**Please click the link below to access my MedTimer app:**
 https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/ 
