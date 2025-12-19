@@ -44,9 +44,9 @@ All components work together in a simple, accessible layout designed for elderly
 **Please click the link below to access my MedTimer app:**
 * https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/
 
-![Screenshot 2025-12-18 at 16.07.28](images/Screenshot 2025-12-18 at 16.07.28.png)
-![Screenshot 2025-12-18 at 16.09.02](images/Screenshot 2025-12-18 at 16.09.02.png)
-![Screenshot 2025-12-18 at 16.09.41](images/Screenshot 2025-12-18 at 16.09.41.png)
-![Screenshot 2025-12-18 at 16.10.06](images/Screenshot 2025-12-18 at 16.10.06.png)
-![Screenshot 2025-12-18 at 16.10.43](images/Screenshot 2025-12-18 at 16.10.43.png)
-![Screenshot 2025-12-18 at 16.11.28](images/Screenshot 2025-12-18 at 16.11.28.png)
+![Home Page without any reminders](images/app.png)
+![Adding medicine](images/app1.png)
+![Home Page with reminder](images/app2.png)
+![Home page after taking medicine](images/app3.png)
+![Weekly report](images/app4.png)
+![Adherence score](images/app5.png)
