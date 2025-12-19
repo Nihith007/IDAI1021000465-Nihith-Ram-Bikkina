@@ -42,4 +42,11 @@ All components work together in a simple, accessible layout designed for elderly
 * Step 7 = Once deployed, copy the live link and include it in this README.
 
 **Please click the link below to access my MedTimer app:**
-* https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/ 
+* https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/
+
+images/Screenshot 2025-12-18 at 16.07.28.png
+images/Screenshot 2025-12-18 at 16.09.02.png
+images/Screenshot 2025-12-18 at 16.09.41.png
+images/Screenshot 2025-12-18 at 16.10.06.png
+images/Screenshot 2025-12-18 at 16.10.43.png
+images/Screenshot 2025-12-18 at 16.11.28.png
