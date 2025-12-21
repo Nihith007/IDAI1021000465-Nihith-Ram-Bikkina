@@ -41,6 +41,16 @@ All components work together in a simple, accessible layout designed for elderly
 * Step 6 = Deploy the application.
 * Step 7 = Once deployed, copy the live link and include it in this README.
 
+**Important Features:**
+
+* Exportable CSV file that records user activity
+* Weekly adherence tracking with motivational messages and emojis
+* Daily checklist showing required medications
+* Weekly informational updates
+* Reminder system to help users take medications on time
+
+**My python code with turtle graphics is visible in the
+
 **Please click the link below to access my MedTimer app:**
 * https://medtimer-4tfh7turyqmmhmehjxtreo.streamlit.app/
 
