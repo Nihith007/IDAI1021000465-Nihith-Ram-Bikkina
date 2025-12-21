@@ -1,1 +1,402 @@
+import turtle
+import json
+from datetime import datetime, timedelta
+import os
 
+# Screen setup
+screen = turtle.Screen()
+screen.setup(width=500, height=800)
+screen.bgcolor("#EFF6FF")
+screen.title("MedTimer - Medication Tracker")
+
+# Data storage
+medicines = []
+logs = []
+current_screen = 'home'
+editing_medicine = None
+
+# File paths for data persistence
+MEDICINES_FILE = "medicines.json"
+LOGS_FILE = "logs.json"
+
+def load_data():
+    """Load data from files"""
+    global medicines, logs
+    try:
+        if os.path.exists(MEDICINES_FILE):
+            with open(MEDICINES_FILE, 'r') as f:
+                medicines = json.load(f)
+        if os.path.exists(LOGS_FILE):
+            with open(LOGS_FILE, 'r') as f:
+                logs = json.load(f)
+    except:
+        medicines = []
+        logs = []
+
+def save_data():
+    """Save data to files"""
+    try:
+        with open(MEDICINES_FILE, 'w') as f:
+            json.dump(medicines, f)
+        with open(LOGS_FILE, 'w') as f:
+            json.dump(logs, f)
+    except:
+        pass
+
+def get_today():
+    return datetime.now().strftime('%Y-%m-%d')
+
+def get_today_formatted():
+    return datetime.now().strftime('%A, %B %d')
+
+def is_medicine_taken(medicine_id, scheduled_time):
+    today = get_today()
+    return any(
+        log['medicine_id'] == medicine_id and 
+        log['date'] == today and 
+        log['time'] == scheduled_time and 
+        log['taken']
+        for log in logs
+    )
+
+def mark_medicine_taken(medicine_id, medicine_name, scheduled_time):
+    today = get_today()
+    now = datetime.now().strftime('%H:%M')
+    
+    for i, log in enumerate(logs):
+        if (log['medicine_id'] == medicine_id and 
+            log['date'] == today and 
+            log['time'] == scheduled_time):
+            logs[i]['taken'] = not log['taken']
+            logs[i]['taken_at'] = now if logs[i]['taken'] else None
+            save_data()
+            return
+    
+    logs.append({
+        'medicine_id': medicine_id,
+        'medicine_name': medicine_name,
+        'date': today,
+        'time': scheduled_time,
+        'taken': True,
+        'taken_at': now
+    })
+    save_data()
+
+def calculate_adherence():
+    if not medicines:
+        return 0
+    
+    last_7_days = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') 
+                   for i in range(7)]
+    
+    total_expected = len(medicines) * 7
+    total_taken = sum(
+        1 for log in logs
+        if log['date'] in last_7_days and log['taken']
+    )
+    
+    return round((total_taken / total_expected) * 100) if total_expected > 0 else 0
+
+def clear_screen():
+    """Clear all turtles from screen"""
+    screen.clear()
+    screen.bgcolor("#EFF6FF")
+
+def draw_rounded_rect(t, x, y, width, height, radius, color, fill=True):
+    """Draw a rounded rectangle"""
+    t.penup()
+    t.goto(x + radius, y)
+    t.pendown()
+    t.setheading(0)
+    
+    if fill:
+        t.fillcolor(color)
+        t.begin_fill()
+    else:
+        t.pencolor(color)
+        t.pensize(2)
+    
+    # Draw rounded rectangle
+    t.forward(width - 2 * radius)
+    t.circle(-radius, 90)
+    t.forward(height - 2 * radius)
+    t.circle(-radius, 90)
+    t.forward(width - 2 * radius)
+    t.circle(-radius, 90)
+    t.forward(height - 2 * radius)
+    t.circle(-radius, 90)
+    
+    if fill:
+        t.end_fill()
+    
+    t.penup()
+
+def draw_text(x, y, text, size=12, color="black", align="center", font="Arial"):
+    """Draw text at position"""
+    writer = turtle.Turtle()
+    writer.hideturtle()
+    writer.penup()
+    writer.goto(x, y)
+    writer.color(color)
+    writer.write(text, align=align, font=(font, size, "normal"))
+
+def draw_circle_progress(x, y, radius, percentage, color):
+    """Draw a circular progress indicator"""
+    t = turtle.Turtle()
+    t.hideturtle()
+    t.speed(0)
+    
+    # Background circle
+    t.penup()
+    t.goto(x, y - radius)
+    t.pendown()
+    t.pencolor("#E5E7EB")
+    t.pensize(15)
+    t.circle(radius)
+    
+    # Progress arc
+    if percentage > 0:
+        t.penup()
+        t.goto(x, y - radius)
+        t.pendown()
+        t.pencolor(color)
+        t.pensize(15)
+        angle = (percentage / 100) * 360
+        t.circle(radius, angle)
+    
+    # Center text
+    draw_text(x, y - 10, f"{percentage}%", size=32, color=color, font="Arial")
+    draw_text(x, y - 35, "Adherence", size=10, color="#6B7280")
+
+def draw_home_screen():
+    """Draw the home screen"""
+    clear_screen()
+    
+    # Header
+    draw_text(0, 350, "MedTimer", size=24, color="#1E3A8A", font="Arial")
+    draw_text(0, 320, get_today_formatted(), size=12, color="#1E40AF")
+    
+    # Title
+    draw_text(0, 280, "Today's Medicines", size=18, color="#1E3A8A")
+    
+    if not medicines:
+        # Empty state
+        draw_text(0, 150, "💊", size=48)
+        draw_text(0, 80, "No medicines scheduled", size=14, color="#6B7280")
+        draw_text(0, 55, "Press 'A' to add your first medicine", size=10, color="#9CA3AF")
+    else:
+        # Medicine cards
+        sorted_medicines = sorted(medicines, key=lambda x: x['time'])
+        y_pos = 240
+        
+        for med in sorted_medicines[:4]:  # Show first 4
+            taken = is_medicine_taken(med['id'], med['time'])
+            
+            # Card background
+            card_color = "#F0FDF4" if taken else "white"
+            t = turtle.Turtle()
+            t.hideturtle()
+            t.speed(0)
+            draw_rounded_rect(t, -200, y_pos - 80, 400, 80, 10, card_color)
+            
+            # Icon and name
+            icon = "✅" if taken else "💊"
+            draw_text(-180, y_pos - 10, icon, size=16, align="left")
+            
+            name_color = "#9CA3AF" if taken else "#1F2937"
+            draw_text(-150, y_pos - 15, med['name'], size=12, color=name_color, align="left")
+            draw_text(-150, y_pos - 35, f"{med['dosage']} • {med['time']}", 
+                     size=9, color="#6B7280", align="left")
+            
+            # Status
+            status = "✓ Taken" if taken else "Pending"
+            status_color = "#065F46" if taken else "#9A3412"
+            draw_text(180, y_pos - 25, status, size=9, color=status_color, align="right")
+            
+            y_pos -= 90
+        
+        # Stats box
+        total_today = len(sorted_medicines)
+        completed_today = sum(1 for m in sorted_medicines 
+                            if is_medicine_taken(m['id'], m['time']))
+        
+        t = turtle.Turtle()
+        t.hideturtle()
+        t.speed(0)
+        draw_rounded_rect(t, -200, -320, 180, 60, 10, "white")
+        draw_text(-110, -280, "Total Today", size=10, color="#6B7280")
+        draw_text(-110, -305, str(total_today), size=18, color="#1E3A8A", font="Arial")
+        
+        draw_rounded_rect(t, 20, -320, 180, 60, 10, "white")
+        draw_text(110, -280, "Completed", size=10, color="#6B7280")
+        draw_text(110, -305, str(completed_today), size=18, color="#16A34A", font="Arial")
+    
+    # Instructions
+    draw_text(0, -360, "Controls: [A]dd | [R]eport | [S]core | [Q]uit", 
+             size=9, color="#6B7280")
+
+def draw_adherence_screen():
+    """Draw the adherence score screen"""
+    clear_screen()
+    
+    # Header
+    draw_text(0, 350, "📈 Adherence Score", size=20, color="#1E3A8A")
+    draw_text(0, 320, "Your medication adherence over the last 7 days", 
+             size=10, color="#6B7280")
+    
+    adherence_score = calculate_adherence()
+    
+    # Determine color based on score
+    if adherence_score >= 90:
+        color = "#22C55E"
+        emoji = "🌟"
+        title = "Excellent!"
+        message = "You're doing great!"
+    elif adherence_score >= 70:
+        color = "#EAB308"
+        emoji = "👍"
+        title = "Good Progress"
+        message = "Keep it up!"
+    else:
+        color = "#F97316"
+        emoji = "💪"
+        title = "Keep Trying"
+        message = "You can do it!"
+    
+    # Progress circle
+    draw_circle_progress(0, 150, 80, adherence_score, color)
+    
+    # Feedback
+    t = turtle.Turtle()
+    t.hideturtle()
+    t.speed(0)
+    draw_rounded_rect(t, -180, -50, 360, 100, 15, "#F0FDF4")
+    
+    draw_text(-150, 10, emoji, size=32, align="left")
+    draw_text(-90, 15, title, size=14, color=color, align="left")
+    draw_text(-90, -10, message, size=10, color="#374151", align="left")
+    
+    # Stats
+    draw_rounded_rect(t, -180, -200, 360, 120, 15, "white")
+    
+    total_taken = sum(1 for log in logs if log['taken'])
+    expected = len(medicines) * 7
+    
+    draw_text(0, -140, "7-Day Statistics", size=14, color="#1F2937")
+    draw_text(0, -170, f"Total Medicines: {len(medicines)}", size=10, color="#374151")
+    draw_text(0, -195, f"Doses Taken: {total_taken}", size=10, color="#16A34A")
+    draw_text(0, -220, f"Expected Doses: {expected}", size=10, color="#374151")
+    
+    if adherence_score == 100:
+        draw_text(0, -270, "🏆 Perfect Week!", size=16, color="#F59E0B")
+    
+    # Instructions
+    draw_text(0, -360, "Press [H] for Home | [Q] to Quit", size=9, color="#6B7280")
+
+def draw_report_screen():
+    """Draw the 7-day report screen"""
+    clear_screen()
+    
+    draw_text(0, 350, "📊 7-Day Report", size=20, color="#1E3A8A")
+    draw_text(0, 320, "Your medication history", size=10, color="#6B7280")
+    
+    if not medicines:
+        draw_text(0, 150, "📅", size=48)
+        draw_text(0, 80, "No medicines to show", size=14, color="#6B7280")
+        draw_text(0, 55, "Add medicines to see your history", size=10, color="#9CA3AF")
+    else:
+        # Simple summary
+        last_7_days = [(datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d') 
+                      for i in range(7)]
+        
+        y_pos = 250
+        for med in medicines[:5]:  # Show first 5
+            t = turtle.Turtle()
+            t.hideturtle()
+            t.speed(0)
+            draw_rounded_rect(t, -200, y_pos - 50, 400, 50, 10, "white")
+            
+            draw_text(-180, y_pos - 15, med['name'], size=11, color="#1F2937", align="left")
+            draw_text(-180, y_pos - 35, med['dosage'], size=8, color="#6B7280", align="left")
+            
+            # Show checkmarks for taken doses
+            taken_count = sum(
+                1 for log in logs
+                if log['medicine_id'] == med['id'] and 
+                log['date'] in last_7_days and 
+                log['taken']
+            )
+            
+            draw_text(150, y_pos - 25, f"{taken_count}/7", size=12, 
+                     color="#16A34A" if taken_count >= 5 else "#F97316", align="right")
+            
+            y_pos -= 60
+        
+        # Summary
+        total_taken = sum(1 for log in logs if log['taken'] and log['date'] in last_7_days)
+        t = turtle.Turtle()
+        t.hideturtle()
+        t.speed(0)
+        draw_rounded_rect(t, -180, -280, 360, 80, 15, "#EFF6FF")
+        draw_text(0, -235, f"Total Doses Taken: {total_taken}", size=12, color="#1E3A8A")
+        draw_text(0, -260, f"Days Tracked: 7", size=10, color="#6B7280")
+    
+    draw_text(0, -360, "Press [H] for Home | [Q] to Quit", size=9, color="#6B7280")
+
+def add_medicine():
+    """Simple add medicine (simplified for turtle)"""
+    name = screen.textinput("Add Medicine", "Medicine name:")
+    if not name:
+        return
+    
+    dosage = screen.textinput("Add Medicine", "Dosage (e.g., 100mg):")
+    if not dosage:
+        return
+    
+    time_str = screen.textinput("Add Medicine", "Time (HH:MM, e.g., 09:00):")
+    if not time_str:
+        time_str = "09:00"
+    
+    medicine = {
+        'id': str(datetime.now().timestamp()),
+        'name': name,
+        'dosage': dosage,
+        'time': time_str,
+        'frequency': 'Daily',
+        'notes': ''
+    }
+    
+    medicines.append(medicine)
+    save_data()
+    draw_home_screen()
+
+def key_press_a():
+    add_medicine()
+
+def key_press_h():
+    draw_home_screen()
+
+def key_press_s():
+    draw_adherence_screen()
+
+def key_press_r():
+    draw_report_screen()
+
+def key_press_q():
+    save_data()
+    screen.bye()
+
+# Setup key bindings
+screen.listen()
+screen.onkey(key_press_a, "a")
+screen.onkey(key_press_h, "h")
+screen.onkey(key_press_s, "s")
+screen.onkey(key_press_r, "r")
+screen.onkey(key_press_q, "q")
+
+# Load data and show home screen
+load_data()
+draw_home_screen()
+
+# Keep window open
+screen.mainloop()
